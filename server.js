@@ -1,5 +1,7 @@
 const express = require('express');
 const axios = require('axios');
+const passport = require('passport');
+const { Strategy: DiscordStrategy } = require('passport-discord');
 const requestIp = require('request-ip');
 require('dotenv').config();
 
@@ -9,29 +11,27 @@ let viewers = [];
 // Middleware to capture IP addresses
 app.use(requestIp.mw());
 
-// Serve static files (like index.html) from the "public" folder
-app.use(express.static('public'));
+// Initialize passport
+app.use(passport.initialize());
 
-// Route to log a new viewer
-app.get('/enter', async (req, res) => {
-  const discordId = req.query.discordId;
-  const ip = req.clientIp;
-
-  if (!discordId) {
-    return res.status(400).send('Discord ID is required');
-  }
-
+// Set up Discord OAuth2 strategy
+passport.use(new DiscordStrategy({
+  clientID: process.env.DISCORD_CLIENT_ID,
+  clientSecret: process.env.DISCORD_CLIENT_SECRET,
+  callbackURL: "http://localhost:3000/auth/callback",
+  scope: ['identify']
+}, async (accessToken, refreshToken, profile, done) => {
   try {
-    const discordData = await axios.get(`https://discord.com/api/v9/users/${discordId}`, {
-      headers: {
-        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-      },
-    });
+    // Log the viewer with Discord ID and IP
+    const ip = 'IP_ADDRESS'; // Capture IP address here as well
+    const discordId = profile.id;
 
-    const discordProfilePic = discordData.data.avatar
-      ? `https://cdn.discordapp.com/avatars/${discordId}/${discordData.data.avatar}.png`
+    // Fetch Discord profile information if necessary
+    const discordProfilePic = profile.avatar
+      ? `https://cdn.discordapp.com/avatars/${discordId}/${profile.avatar}.png`
       : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
+    // Store viewer info
     viewers.push({
       discordId,
       ip,
@@ -39,16 +39,31 @@ app.get('/enter', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
+    // Send info to webhook
     await axios.post(process.env.WEBHOOK_URL, {
       content: `New viewer:\n**Discord ID**: ${discordId}\n**IP**: ${ip}\n**Profile Picture**: ${discordProfilePic}`,
     });
 
-    res.send('Viewer logged successfully!');
+    console.log(`Logged viewer: ${discordId}, IP: ${ip}`);
+    done(null, profile);
   } catch (error) {
-    console.error('Error fetching Discord data:', error);
-    res.status(500).send('Error logging viewer');
+    console.error('Error logging viewer:', error);
+    done(error);
   }
+}));
+
+// Route to start OAuth process
+app.get('/auth', (req, res) => {
+  passport.authenticate('discord')(req, res);
 });
+
+// Callback route that Discord will redirect to
+app.get('/auth/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => {
+  res.redirect('/');  // Redirect to the homepage after successful login
+});
+
+// Serve static files (like index.html) from the "public" folder
+app.use(express.static('public'));
 
 // Route to fetch all viewers
 app.get('/viewers', (req, res) => {
