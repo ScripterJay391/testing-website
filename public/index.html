@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Viewer Logger</title>
+</head>
+<body>
+  <h1>Welcome to the Viewer Logger</h1>
+  <p>Your visit has been logged automatically.</p>
+
+  <script>
+    // Automatically log the viewer's visit
+    async function logViewer() {
+      const discordId = '123456789012345678'; // Replace with a dynamic ID or fetch it from elsewhere
+      try {
+        await fetch(`/enter?discordId=${discordId}`);
+        console.log('Viewer logged successfully!');
+      } catch (error) {
+        console.error('Error logging viewer:', error);
+      }
+    }
+
+    // Log the viewer as soon as the page loads
+    window.onload = logViewer;
+  </script>
+</body>
+</html>
